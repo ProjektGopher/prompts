@@ -3,9 +3,11 @@
 namespace Laravel\Prompts;
 
 use Closure;
+use React\EventLoop\Loop;
+use React\Promise\Promise;
 use RuntimeException;
 
-class Spinner extends Prompt
+class Spinner extends AsyncPrompt
 {
     /**
      * How long to wait between rendering each frame.
@@ -16,16 +18,6 @@ class Spinner extends Prompt
      * The number of times the spinner has been rendered.
      */
     public int $count = 0;
-
-    /**
-     * Whether the spinner can only be rendered once.
-     */
-    public bool $static = false;
-
-    /**
-     * The process ID after forking.
-     */
-    protected int $pid;
 
     /**
      * Create a new Spinner instance.
@@ -47,75 +39,35 @@ class Spinner extends Prompt
     {
         $this->capturePreviousNewLines();
 
-        if (! function_exists('pcntl_fork')) {
-            return $this->renderStatically($callback);
-        }
-
-        $originalAsync = pcntl_async_signals(true);
-
-        pcntl_signal(SIGINT, fn () => exit());
-
         try {
             $this->hideCursor();
             $this->render();
 
-            $this->pid = pcntl_fork();
+            $loop = Loop::get();
 
-            if ($this->pid === 0) {
-                while (true) { // @phpstan-ignore-line
-                    $this->render();
-
-                    $this->count++;
-
-                    usleep($this->interval * 1000);
-                }
-            } else {
+            $timer = $loop->addPeriodicTimer($this->interval, function () {
+                $this->render();
+                $this->count++;
+            });
+            
+            $resolver = function (callable $resolve, callable $reject) use ($callback, $loop, $timer) {
                 $result = $callback();
+                $loop->cancelTimer($timer);
+                $this->eraseRenderedLines();
+            
+                $resolve($result);
+            };
+            
+            $promise = new Promise($resolver);
 
-                $this->resetTerminal($originalAsync);
-
-                return $result;
-            }
+            Loop::run();
+            
+            return $promise;
         } catch (\Throwable $e) {
-            $this->resetTerminal($originalAsync);
+            $this->eraseRenderedLines();
 
             throw $e;
         }
-    }
-
-    /**
-     * Reset the terminal.
-     */
-    protected function resetTerminal(bool $originalAsync): void
-    {
-        pcntl_async_signals($originalAsync);
-        pcntl_signal(SIGINT, SIG_DFL);
-
-        $this->eraseRenderedLines();
-    }
-
-    /**
-     * Render a static version of the spinner.
-     *
-     * @template TReturn of mixed
-     *
-     * @param  \Closure(): TReturn  $callback
-     * @return TReturn
-     */
-    protected function renderStatically(Closure $callback): mixed
-    {
-        $this->static = true;
-
-        try {
-            $this->hideCursor();
-            $this->render();
-
-            $result = $callback();
-        } finally {
-            $this->eraseRenderedLines();
-        }
-
-        return $result;
     }
 
     /**
@@ -144,17 +96,5 @@ class Spinner extends Prompt
         $lines = explode(PHP_EOL, $this->prevFrame);
         $this->moveCursor(-999, -count($lines) + 1);
         $this->eraseDown();
-    }
-
-    /**
-     * Clean up after the spinner.
-     */
-    public function __destruct()
-    {
-        if (! empty($this->pid)) {
-            posix_kill($this->pid, SIGHUP);
-        }
-
-        parent::__destruct();
     }
 }
