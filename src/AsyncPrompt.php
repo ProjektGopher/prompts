@@ -2,13 +2,24 @@
 
 namespace Laravel\Prompts;
 
+use Laravel\Prompts\Output\AsyncConsoleOutput;
+use Laravel\Prompts\Output\BufferedConsoleOutput;
 use Laravel\Prompts\Support\Result;
 use Override;
 use React\EventLoop\Loop;
 use React\Stream\ReadableResourceStream;
+use Symfony\Component\Console\Output\OutputInterface;
 
 abstract class AsyncPrompt extends Prompt
 {
+    /**
+     * The output instance.
+     *
+     * We redefine the output to prevent the parent class from
+     * forcing a non-async console output on this instance.
+     */
+    protected static OutputInterface $output;
+    
     protected static ReadableResourceStream $stdin;
     
     #[Override]
@@ -20,6 +31,8 @@ abstract class AsyncPrompt extends Prompt
                 static::$stdin->emit('data', [$key]);
             });
         }
+
+        static::setOutput(new BufferedConsoleOutput);
     }
 
     #[Override]
@@ -47,5 +60,23 @@ abstract class AsyncPrompt extends Prompt
         }
 
         return $result->value;
+    }
+
+    /**
+     * Set the output instance.
+     */
+    #[Override]
+    public static function setOutput(OutputInterface $output): void
+    {
+        static::$output = $output;
+    }
+
+    /**
+     * Get the current output instance.
+     */
+    #[Override]
+    protected static function output(): OutputInterface
+    {
+        return static::$output ??= new AsyncConsoleOutput();
     }
 }
