@@ -32,7 +32,7 @@ abstract class AsyncPrompt extends Prompt
             });
         }
 
-        static::setOutput(new BufferedConsoleOutput);
+        self::setOutput(new BufferedConsoleOutput);
     }
 
     #[Override]
@@ -68,7 +68,7 @@ abstract class AsyncPrompt extends Prompt
     #[Override]
     public static function setOutput(OutputInterface $output): void
     {
-        static::$output = $output;
+        self::$output = $output;
     }
 
     /**
@@ -77,6 +77,6 @@ abstract class AsyncPrompt extends Prompt
     #[Override]
     protected static function output(): OutputInterface
     {
-        return static::$output ??= new AsyncConsoleOutput();
+        return self::$output ??= new AsyncConsoleOutput();
     }
 }
