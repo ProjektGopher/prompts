@@ -2,6 +2,7 @@
 
 namespace Laravel\Prompts\Output;
 
+use Override;
 use React\Stream\WritableResourceStream;
 
 class AsyncConsoleOutput extends ConsoleOutput
@@ -11,6 +12,7 @@ class AsyncConsoleOutput extends ConsoleOutput
     /**
      * Write to the output buffer.
      */
+    #[Override]
     protected function doWrite(string $message, bool $newline): void
     {
         $this->stdout ??= new WritableResourceStream(STDOUT);
@@ -24,6 +26,7 @@ class AsyncConsoleOutput extends ConsoleOutput
     /**
      * Write output directly, bypassing newline capture.
      */
+    #[Override]
     public function writeDirectly(string $message): void
     {
         $this->doWrite($message, false);
